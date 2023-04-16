@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: mahimachander/pod-controller
   pullPolicy: IfNotPresent
-  tag: "latest"
+  tag: "v2"
 
 imagePullSecrets: []
 nameOverride: pod-controller

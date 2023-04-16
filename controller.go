@@ -6,10 +6,15 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+)
+
+const(
+	namespaceAnnotationKey = "managed"
+	podAnnotationKey
 )
 
 func main() {
@@ -23,27 +28,43 @@ func main() {
 		panic(err.Error())
 	}
 
-	// Watch for new pods
-	podWatch, err := clientset.CoreV1().Pods(v1.NamespaceAll).Watch(context.Background(), v1.ListOptions{})
+	// Watch for new pods. Exclude existing pods
+	podWatch, err := clientset.CoreV1().Pods(metav1.NamespaceAll).Watch(context.Background(), metav1.ListOptions{ResourceVersion: ""})
 	if err != nil {
 		panic(err.Error())
 	}
 	defer podWatch.Stop()
 
 	// Process events received from pod watch
-	// TODO: Only respond to pods with a particular annotation
-	// TODO: Only respond to pods in namespaces with a particular annotation
 	for event := range podWatch.ResultChan() {
 		pod, ok := event.Object.(*corev1.Pod)
 		if !ok {
 			continue
 		}
-		switch event.Type {
-		case watch.Added:
+		if event.Type == watch.Added && validatePod(clientset, pod) {
 			annotatePod(clientset, pod)
 			logPod(pod)
 		}
 	}
+}
+
+// Check if a pod has a specific annotation and if its namespace has a specific annotation
+func validatePod(clientset *kubernetes.Clientset, pod *corev1.Pod) bool {
+	ns, err := clientset.CoreV1().Namespaces().Get(context.Background(), pod.GetNamespace(), metav1.GetOptions{})
+	if err != nil {
+		fmt.Println(err)
+	}
+	nsAnnotations := ns.GetAnnotations()
+	if nsAnnotations == nil {
+		return false
+	}
+
+	podAnnotations := pod.GetAnnotations()
+	if podAnnotations == nil {
+		return false
+	}
+
+	return pod.GetAnnotations()[podAnnotationKey] != "" && ns.GetAnnotations()[namespaceAnnotationKey] != ""
 }
 
 // Annotate pod with timestamp
@@ -56,7 +77,7 @@ func annotatePod(clientset *kubernetes.Clientset, pod *corev1.Pod) {
 	annotations["timestamp"] = timestamp
 	pod.SetAnnotations(annotations)
 
-	_, err := clientset.CoreV1().Pods(pod.Namespace).Update(context.Background(), pod, v1.UpdateOptions{})
+	_, err := clientset.CoreV1().Pods(pod.Namespace).Update(context.Background(), pod, metav1.UpdateOptions{})
 	if err != nil {
 		fmt.Println(err)
 	}
