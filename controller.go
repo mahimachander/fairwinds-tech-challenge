@@ -18,15 +18,13 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	clientSet, err := kubernetes.NewForConfig(config)
+	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		panic(err.Error())
 	}
 
 	// Watch for new pods
-	// TODO: specify namespace
-	// TODO: ListOptions has TypeMeta to restrict the list of returned objects by labels.
-	podWatch, err := clientSet.CoreV1().Pods("").Watch(context.Background(), v1.ListOptions{})
+	podWatch, err := clientset.CoreV1().Pods(v1.NamespaceAll).Watch(context.Background(), v1.ListOptions{})
 	if err != nil {
 		panic(err.Error())
 	}
@@ -42,7 +40,7 @@ func main() {
 		}
 		switch event.Type {
 		case watch.Added:
-			annotatePod(clientSet, pod)
+			annotatePod(clientset, pod)
 			logPod(pod)
 		}
 	}
