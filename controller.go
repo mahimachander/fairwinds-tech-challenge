@@ -7,14 +7,20 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/leaderelection"
+	"k8s.io/client-go/tools/leaderelection/resourcelock"
 )
 
-const(
+const (
 	namespaceAnnotationKey = "managed"
-	podAnnotationKey
+	podAnnotationKey       = "managed"
+
+	leaseName      = "pod-controller-lease"
+	leaseNamespace = "default"
 )
 
 func main() {
@@ -23,13 +29,43 @@ func main() {
 	if err != nil {
 		panic(err.Error())
 	}
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
+	clientset := kubernetes.NewForConfigOrDie(config)
+
+	leaderElectionConfig := leaderelection.LeaderElectionConfig{
+		Lock: &resourcelock.LeaseLock{
+			LeaseMeta: metav1.ObjectMeta{
+				Name:      leaseName,
+				Namespace: leaseNamespace,
+			},
+			Client: clientset.CoordinationV1(),
+			LockConfig: resourcelock.ResourceLockConfig{
+				// Unique identifier for this process across all participants in the election
+				Identity: string(uuid.NewUUID()),
+			},
+		},
+		LeaseDuration: 15 * time.Second,
+		RenewDeadline: 10 * time.Second,
+		RetryPeriod:   2 * time.Second,
+		Callbacks: leaderelection.LeaderCallbacks{
+			OnStartedLeading: func(ctx context.Context) {
+				// Start processing tasks as the leader
+				watchForNewPods(clientset)
+			},
+			OnStoppedLeading: func() {
+				// Stop processing tasks when leadership is lost
+			},
+			OnNewLeader: func(identity string) {
+				// New leader has been elected
+			},
+		},
 	}
 
-	// Watch for new pods. Exclude existing pods
-	podWatch, err := clientset.CoreV1().Pods(metav1.NamespaceAll).Watch(context.Background(), metav1.ListOptions{ResourceVersion: ""})
+	leaderelection.RunOrDie(context.Background(), leaderElectionConfig)
+}
+
+// TODO: exclude existing pods, ResourceVersion: "" as a ListOption doesn't work
+func watchForNewPods(clientset *kubernetes.Clientset) {
+	podWatch, err := clientset.CoreV1().Pods(metav1.NamespaceAll).Watch(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		panic(err.Error())
 	}
