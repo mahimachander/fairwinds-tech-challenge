@@ -14,7 +14,7 @@ This is a golang Kubernetes Controller which:
 Helm v3.10.3 and Go 1.19.4 are utilized.
 
 ## Deploying
-From the parent directory, run `helm upgrade pod-controller ./k8s`. Resources will be in the `default` namespace.
+From the parent directory, run `helm upgrade pod-controller ./k8s --install`. Resources will be in the `default` namespace.
 
 ## Further Work
 The controller performs actions on existing and new pods; however, the desire is to only listen to new pods. More googling/testing is required to integrate this functionality. My hunch is that an option or query parameter of some sort exists or the controller could differentiate new pods based comparing the pod's created timestamp to the controller's own creation time.
